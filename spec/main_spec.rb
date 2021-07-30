@@ -1,7 +1,7 @@
 describe 'database' do
 	def run_script(commands)
 		raw_output = nil
-		IO.popen("./db", "r+") do |pipe|
+		IO.popen("./db test.db", "r+") do |pipe|
 			commands.each do |command|
 				pipe.puts command
 			end
@@ -12,6 +12,12 @@ describe 'database' do
 			raw_output = pipe.gets(nil)
 		end
 		raw_output.split("\n")
+	end
+
+	after(:each) do
+		File.open("test.db", "r") do |f|
+			File.delete(f)
+		end
 	end
 
 	it 'inserts and retrieves a row' do
@@ -98,9 +104,66 @@ describe 'database' do
 			".exit"
 		])
 		expect(result2).to match_array([
-			'db > (1, user1, person1@xample.com)',
+			'db > (1, user1, person1@example.com)',
 			"Executed.",
 			"db > ",
 		])
+	end
+
+	it 'prints constants' do
+		script = [
+			".constants",
+			".exit"
+		]
+		result = run_script(script)
+
+		expect(result).to match_array([
+			"db > Constants:",
+      "ROW_SIZE: 293",
+      "COMMON_NODE_HEADER_SIZE: 6",
+      "LEAF_NODE_HEADER_SIZE: 10",
+      "LEAF_NODE_CELL_SIZE: 297",
+      "LEAF_NODE_SPACE_FOR_CELLS: 4086",
+      "LEAF_NODE_MAX_CELLS: 13",
+      "db > ",
+		])
+	end
+
+	it 'allows printing out the structure of a one-node btree' do
+		script = [3, 1, 2].map do |i|
+			"insert #{i} user#{i} person#{i}example.com"
+		end
+		script << ".btree"
+		script << ".exit"
+		result = run_script(script)
+
+		expect(result).to match_array([
+			"db > Executed.",
+			"db > Executed.",
+			"db > Executed.",
+			"db > Tree:",
+			"leaf (size 3)",
+      "  - 0 : 1",
+      "  - 1 : 2",
+      "  - 2 : 3",
+      "db > "
+		])
+	end
+
+	it 'prints an error message if there is a duplicate id' do
+		script = [
+			"insert 1 user1 person1@example.com",
+			"insert 1 user1 person1@example.com",
+			"select",
+			".exit"
+		]
+    result = run_script(script)
+    expect(result).to match_array([
+      "db > Executed.",
+      "db > Error: Duplicate key.",
+      "db > (1, user1, person1@example.com)",
+      "Executed.",
+      "db > ",
+    ])
 	end
 end
